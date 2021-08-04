@@ -1,0 +1,35 @@
+
+	installdir={{  temp_drive }}\CharlesRiver\ServerApps
+	jarComponent=1
+	defaultComponent=1
+	jdk=1
+	perl=1
+	CommonInfrastructure_Base=1
+	CommonInfrastructure_Upgrade=1
+	MiddleTier_Base=1
+	Utilities_Base=1
+	FIX_Base=1
+	Reporting_Base=1
+	DATABASE_TYPE=O90
+	MSS_SERVER=
+	MSS_SERVERNAME=
+	MSS_PORT=1433
+	MSS_DATABASE=
+	MSS_USER=
+	MSS_PASSWORD=9dUEjJK9nGY=
+
+	bcpexe=
+	ORA_SERVER={{ ora_servername }}
+	ORA_SERVERNAME={{ crd_db }}
+	importdatabase=
+	ORA_DATABASE={{ lookup("env", "crddbuser") }}
+	ORA_PORT=1521
+	ORA_USER={{ lookup("env", "crddbuser") }}
+	ORA_PASSWORD={{ lookup("env", "crddbpwd") }}
+
+	sqlldrexe={{ sqldr_path }}
+	chk_ports=1
+	PORT={{ crd_port }}
+	SHUTDOWN={{ shutdown_port }}
+	RMI={{ rmi_port }}
+	windows_service={{ install_windows_service }}
