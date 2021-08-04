@@ -1,0 +1,10 @@
+---
+
+- name: Installing UCD Agent
+  hosts: "{{ server_name1 }}"
+  connection: winrm
+  collections:
+    - ansible.windows
+
+  roles:
+    - role: installucdagent
