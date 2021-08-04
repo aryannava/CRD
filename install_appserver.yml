@@ -1,0 +1,10 @@
+---
+
+- name: Installing Charles River Middleware Layer
+  hosts: "{{ server_name1 }}"
+  connection: winrm
+  collections:
+    - ansible.windows
+
+  roles:
+    - role: crdapp
