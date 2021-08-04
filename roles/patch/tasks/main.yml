@@ -1,0 +1,194 @@
+---
+
+# This playbook applies CRD patch to 18r1
+
+- name: Import CRD Variables
+  include_vars: host_vars/crd.yml
+  no_log: true
+
+- set_fact: 
+    temp_drive: 'D:'
+  when: "'vmware' in deployment_target"
+
+- set_fact: 
+    temp_drive: 'C:'
+  when: "'cloud' in deployment_target"
+
+- block:
+   - name: Gather CharlesRiver Service Info
+     win_service:
+        name: "CharlesRiver"
+     register: cr_service
+    
+   - name: Gather Scheduler Service Info
+     win_service:
+        name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+     register: sq_service
+   
+   - name: Gather Bloomberg Service Info
+     win_service:
+        name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+     register: bb_service
+   
+   - name: Gather Fix Engine Service Info
+     win_service:
+        name: Charles River - Cameron FIX Engine
+     register: fe_service
+     
+   - name: Stop CharlesRiver Service
+     win_service:
+         name: "CharlesRiver"
+         state:  stopped
+     when: cr_service.exists   
+   
+   - name: Stop Bloomberg Service
+     win_service:
+         name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+         state:  stopped
+     when: bb_service.exists   
+   
+   - name: Stop Scheduler Service
+     win_service:
+         name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+         state:  stopped
+     when: sq_service.exists         
+   
+   - name: Stop Fix Engine Service
+     win_service:
+         name: Charles River - Cameron FIX Engine
+         state:  stopped
+     when: fe_service.exists
+
+  rescue:
+    - name: Restarting machine
+      win_reboot:
+        reboot_timeout: 3600
+     
+  
+- name: Create  Temporary directory structure
+  win_file:
+    path: "{{ temp_drive }}\\temp"
+    state: directory
+
+- name: Create directory structure
+  win_file:
+    path: "{{ temp_drive }}\\temp"
+    state: directory
+    
+- name: Download Patch Binaries
+  win_get_url: 
+    url: "{{ binary_repo }}/Patch/{{ crd_ver }}.{{ item }}/64bit/CharlesRiver-Patch-{{ crd_ver }}.{{ item }}.zip"
+    dest: "{{ temp_drive }}\\temp\\crd18r1P{{ item }}.zip"
+  with_items: "{{ crd_patch_num }}"  
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_156) is not defined
+    
+- name: Unzip Patch Binaries
+  win_unzip:
+    src: "{{ temp_drive }}\\temp\\crd18r1P{{ item }}.zip"
+    dest: "{{ temp_drive }}\\temp\\crdpatch"
+  with_items: "{{ crd_patch_num }}"  
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_157) is not defined
+
+- name: find dbadmin Patch name
+  win_find:
+    paths: "{{ temp_drive }}\\temp\\crdpatch"
+    patterns: ['CRIMS-*-dbadmin-patch-*.zip']
+    recurse: yes
+  register: dbadminpath
+
+- name: Unzip dbAdmin Patch
+  win_unzip:
+    src: "{{ item.path }}"
+    dest: "{{ temp_drive }}\\temp\\crdpatch\\dbadmin"
+  with_items:
+    - "{{ dbadminpath.files }}"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_158) is not defined
+    
+- name: Copy Binaries to dbAdmin
+  win_copy:
+    src: "{{ temp_drive }}\\temp\\crdpatch\\dbadmin"
+    dest: "{{temp_drive}}\\CharlesRiver\\dbAdmin"
+    remote_src: 'yes'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_159) is not defined
+
+- name: find Middleware Patch name
+  win_find:
+    paths: "{{ temp_drive }}\\temp\\crdpatch"
+    patterns: ['CRIMS-*-server-patch-*.zip']
+    recurse: yes
+  register: middlewarepatch
+
+- name: Unzip Middleware Patch
+  win_unzip:
+    src: "{{ item.path }}"
+    dest: "{{ temp_drive }}\\temp\\crdpatch\\server"
+  with_items:
+    - "{{ middlewarepatch.files }}"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_160) is not defined
+
+- name: Copy Binaries to MiddleTier Appserver
+  win_copy:
+    src: "{{ temp_drive }}\\temp\\crdpatch\\server"
+    dest: "{{ temp_drive }}\\CharlesRiver\\ServerApps"
+    remote_src: 'yes'  
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_161) is not defined
+
+- name: Apply Sqlnet.ora Fix
+  win_shell: "{{ item }}"
+  with_items:
+    - '(gc "{{ tns_location }}\\sqlnet.ora") -replace "SQLNET.AUTHENTICATION_SERVICES=.*","SQLNET.AUTHENTICATION_SERVICES= (NONE)" | Set-Content "{{ tns_location }}\\sqlnet.ora"'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+
+- name: find update_oracle.sql patch scripts
+  win_find:
+    paths: "{{ temp_drive }}\\temp\\crdpatch"
+    patterns: ['update_oracle.sql']
+    recurse: yes
+  register: updateoracle
+
+- name: Execute Oracle Sqls for Patch    
+  win_shell: 'sqlplus -L {{ lookup("env", "crddbuser") }}/{{ lookup("env", "crddbpwd") }}@{{ crd_db }} @{{ item.path }}'
+  with_items:
+    - "{{ updateoracle.files }}"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+
+- name: Revert Sqlnet.ora Fix
+  win_shell: "{{ item }}"
+  with_items:
+    - '(gc "{{ tns_location }}\\sqlnet.ora") -replace "SQLNET.AUTHENTICATION_SERVICES=.*","SQLNET.AUTHENTICATION_SERVICES= (ALL,KERBEROS5PRE)" | Set-Content "{{ tns_location }}\\sqlnet.ora"'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+    
+- name: Execute Windows OS Specififc Script
+  win_shell: '{{ temp_drive }}\\CharlesRiver\\ServerApps\bin\makeLocal.bat {{ temp_drive }}\\CharlesRiver\\ServerApps\bin\GenerateUMASleeves.bat'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+  
+- name: Start CharlesRiver Service
+  win_service:
+      name: "CharlesRiver"
+      state:  started
+  when: cr_service.exists   
+
+- name: Start Bloomberg Service
+  win_service:
+      name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+      state:  started
+  when: bb_service.exists   
+
+- name: Start Scheduler Service
+  win_service:
+      name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+      state:  started
+  when: sq_service.exists         
+
+#- name: Start Fix Engine Service
+#  win_service:
+#    name: Charles River - Cameron FIX Engine
+#    state:  started
+#    ignore_error: yes
+#  when: fe_service.exists
+  
+- name: Performing Cleanup
+  win_file:
+      path: "{{ temp_drive }}\\temp"
+      state: absent   
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_166) is not defined
