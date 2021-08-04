@@ -1,0 +1,10 @@
+---
+
+- name: Installing dbAdmin
+  hosts: "{{ server_name1 }}"
+  connection: winrm
+  collections:
+    - ansible.windows
+
+  roles:
+    - role: dbadmin
