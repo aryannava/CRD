@@ -1,0 +1,145 @@
+---
+
+- name: Import CRD Variables
+  include_vars: host_vars/crd.yml
+  no_log: true
+
+- set_fact: 
+    temp_drive: 'D:'
+  when: "'vmware' in deployment_target"
+
+- set_fact: 
+    temp_drive: 'C:'
+  when: "'cloud' in deployment_target"
+
+- block:
+  - name: Gather CharlesRiver Service Info
+    win_service:
+       name: "CharlesRiver"
+    register: cr_service
+   
+  - name: Gather Scheduler Service Info
+    win_service:
+       name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+    register: sq_service
+  
+  - name: Gather Bloomberg Service Info
+    win_service:
+       name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+    register: bb_service
+  
+  - name: Gather Fix Engine Service Info
+    win_service:
+       name: Charles River - Cameron FIX Engine
+    register: fe_service
+    
+  - name: Stop CharlesRiver Service
+    win_service:
+        name: "CharlesRiver"
+        state:  stopped
+        start_mode: disabled
+    when: cr_service.exists   
+  
+  - name: Stop Bloomberg Service
+    win_service:
+        name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+        state:  stopped
+        start_mode: disabled
+    when: bb_service.exists   
+  
+  - name: Stop Scheduler Service
+    win_service:
+        name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+        state:  stopped
+        start_mode: disabled
+    when: sq_service.exists         
+  
+  - name: Stop Fix Engine Service
+    win_service:
+        name: Charles River - Cameron FIX Engine
+        state:  stopped
+        start_mode: disabled
+    when: fe_service.exists
+
+  rescue:
+    - name: Restarting server
+      win_reboot:
+        reboot_timeout: 3600
+  
+  
+- name: Remove CharlesRiver Service
+  win_service:
+      name: "CharlesRiver"
+      state:  absent
+   
+- name: Remove Bloomberg Service
+  win_service:
+      name: "Domain_CRD_Bloomberg_Adapter_{{crd_env}}"
+      state:  absent
+
+- name: Remove Scheduler Service
+  win_service:
+      name: "Domain_CRD_ScheduleJobQueue_Listener_{{crd_env}}"
+      state:  absent    
+
+- name: Remove Fix Engine Service
+  win_service:
+      name: Charles River - Cameron FIX Engine
+      state:  absent 
+  ignore_errors: yes      
+
+- name: Locate appserver uninstall executable
+  win_find:
+    paths: "{{ temp_drive }}\\"
+    patterns: ['CharlesRiver\uninstall.exe']  
+    recurse: yes
+  register: appuninstall
+
+- name: Uninstall CRD Middletear
+  win_shell: '{{ item.path }} --mode unattended'
+  with_items:
+    - "{{ appuninstall.files }}"
+  when: appuninstall.matched > 0
+
+- name: Locate CRD ini files
+  win_shell: "Get-ChildItem -Path {{ item }} -Include CRD*.ini -Recurse | % { Write-Host $_.FullName }"
+  with_items:
+    - "{{ temp_drive }}\\"
+  become: yes
+  become_user: Administrator   
+  register: crdini    
+
+- name: Remove ini files
+  win_file:
+    path: "{{ item }}"
+    state: absent
+  when: crdini.stdout is defined 
+  with_items:
+    - "{{ crdini.stdout }}"
+
+- wait_for:
+    timeout: 60
+  delegate_to: localhost  
+
+- name: Remove UCD Agent Services
+  win_service:
+    name: ibm-urbancode-deploy-agent
+    state:  absent 
+
+- name: Remove installation Binaries & Directories
+  win_file:
+    path: "{{ item }}"
+    state: absent 
+  with_items:
+    - "{{ temp_drive }}\\temp"
+    - "{{ temp_drive }}\\Domain_Applications"
+    - "{{ temp_drive }}\\Domain_CustomCode"
+    - C:\Windows\CRD_DBAdmin_InstallBuilderInstall.ini
+    - C:\Windows\CRD_MiddleTier_InstallBuilderInstall.ini    
+    - "{{ temp_drive }}\\CharlesRiver"
+    - "{{ temp_drive }}\\ibm-ucdagent" 
+
+     
+- name: Reboot
+  win_reboot:
+    reboot_timeout: 3600
