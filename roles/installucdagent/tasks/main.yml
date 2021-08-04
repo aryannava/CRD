@@ -1,0 +1,98 @@
+---
+
+- name: Import CRD Variables
+  include_vars: host_vars/ucd.yml
+  no_log: true
+
+- set_fact: 
+    temp_drive: 'D:'
+  when: "'vmware' in deployment_target"
+
+- set_fact: 
+    temp_drive: 'C:'
+  when: "'cloud' in deployment_target"
+
+- name: Check if UCD already installed
+  win_shell: "Get-ChildItem -Path {{ temp_drive }}\\ -Include agent.cmd -Recurse | % { Write-Host $_.FullName }"
+  register: ucdexists    
+
+- block:
+    - name: Create  directory structure
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      with_items:
+       - "{{ temp_drive }}\\temp"
+       - "{{ temp_drive }}\\ibm-ucdagent"  
+    
+    - name: Install Java8 64bit
+      win_chocolatey:
+        name: "{{ jdk_package }}"
+        state: latest
+        params: 'installdir={{ temp_drive }}\\java'
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_101) is not defined
+    
+    - name: Download UCD Agent Binaries
+      win_get_url:
+        url: "{{ binary_repo }}/Agent/v7/64bit/UCDAgent-{{ ucd_ver }}-64bit.zip"
+        dest: "{{ temp_drive }}\\temp\\UCDAgent.zip"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_102) is not defined
+        
+    - name: Unzip UCD Agent
+      win_unzip:
+        src: "{{ temp_drive }}\\temp\\UCDAgent.zip"
+        dest: "{{ temp_drive }}\\temp"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_103) is not defined
+    
+    - name: Copy UCD Install File
+      win_template:
+        src: ucdAgent-response.properties.j2
+        dest:  "{{ temp_drive }}\\temp\\ucdAgent-response.properties"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_104) is not defined
+        
+    - name: Install UCD Agent
+      win_command: '{{ temp_drive }}\\temp\\ucd-agent-install\install-agent-from-file.bat {{ temp_drive }}\temp\ucdAgent-response.properties'
+      args:
+        chdir: "{{ temp_drive }}\\temp\\ucd-agent-install"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_105) is not defined
+        
+    - name: Update UCD Directory Permissions
+      win_acl:
+        user: '{{ lookup("env", "ucduser") }}'
+        path: "{{ temp_drive }}\\ibm-ucdagent"
+        type: allow
+        rights: FullControl
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_106) is not defined
+        
+    - name: Add UCD ServiceAccount To Administrator Group
+      win_group_membership:
+        name: Administrators
+        members:
+          - '{{ lookup("env", "ucduser") }}'
+        state: present  
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_107) is not defined
+        
+    - name: Assign LogOnAsService Right 
+      win_user_right:
+       name: SeServiceLogonRight
+       users:
+       - '{{ lookup("env", "ucduser") }}'
+       action: add
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_108) is not defined
+       
+    - name: Update UCD Service to runas Service Account
+      win_service:
+        name: ibm-urbancode-deploy-agent
+        state: started
+        start_mode: auto
+        username: '{{ lookup("env", "ucduser") }}'
+        password: '{{ lookup("env", "ucdpassword") }}'
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_109) is not defined
+        
+    - name: Perform Cleanup
+      win_file:
+        path: "{{ temp_drive }}\\temp"
+        state: absent
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_110) is not defined
+
+  when: ucdexists.stdout == ""
