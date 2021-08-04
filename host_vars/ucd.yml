@@ -1,0 +1,7 @@
+jdk_package: jdk8
+java_major_version: 8.0
+java_minor_version: 191
+ucd_service_account: 'DomainB\svc_urbancode_dev'
+binary_repo: http://invnexus.domain.com/repository/infra-binaries/UCD
+ucd_ver: 7.0.5
+deployment_target: vmware  #vmware or cloud. Its used to assign right disks
