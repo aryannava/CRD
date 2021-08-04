@@ -1,0 +1,20 @@
+---
+
+- name: Installing Charles River Middleware Layer
+  hosts: "{{ server_name1 }}"
+  connection: winrm
+  collections:
+    - ansible.windows
+
+  roles:
+    - role: crdapp
+      when: "'AppServer' in install_options"
+
+    - role: dbadmin
+      when: "'dbAdmin' in install_options"
+
+    - role: patch
+      when: "'ApplyPatch' in install_options"  
+
+    - role: installucdagent
+      when: "'UCDAgent' in install_options"                
