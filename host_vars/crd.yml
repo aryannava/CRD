@@ -1,0 +1,28 @@
+---
+
+crd_env_type:
+crd_db: CRDDEVA
+oracle_install_dir: D:\Oracle\product\12.1.0.0\client_Administrator_64bit
+tns_location: D:\Oracle\TNSNames
+ora_servername: crddbdev11
+ora_port: 1521
+crd_port: 8082
+check_port: 1
+shutdown_port: 8005
+rmi_port: 1099
+install_windows_service: 0
+crd_service_name: CharlesRiver
+crd_product_id: CRDAPP-18.1-177
+crd_env: CRDENV36
+install_fix_service: y
+install_ucd_agent: n
+import_dir: fsdevapp01
+minor_patch_no:
+
+deployment_target: vmware  #vmware or cloud. Its used to assign right disks
+binary_repo: http://invnexus.domain.com/repository/infra-binaries/CharlesRiver
+crd_ver: 18R1
+crd_patch_num: #current available patches 28, 44, 47
+  - 0.28
+  - 0.44
+  - 0.47
