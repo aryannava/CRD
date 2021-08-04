@@ -1,0 +1,182 @@
+---
+
+- name: Import CRD Variables
+  include_vars: host_vars/crd.yml
+
+###Disk names are used dynamically either C or D based on teh deployments vmware or cloud as cloud servers doesn't have same disk setup. ###
+- set_fact: 
+    temp_drive: 'D:'
+  when: "'vmware' in deployment_target"
+
+- set_fact: 
+    temp_drive: 'C:'
+  when: "'cloud' in deployment_target"
+  
+- name: Create directory structure
+  win_file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - "{{ temp_drive }}\\temp" 
+    - "{{ temp_drive }}\\CharlesRiver\\ServerApps"
+
+- name: Install Choco
+  win_chocolatey:
+    name: all
+    state: latest
+
+- name: Install Java8 64bit
+  win_chocolatey:
+    name: "jdk8"
+    state: latest
+    params: 'installdir={{ temp_drive }}\\java'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_100) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_100) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_100": "success"
+    per_host: no  
+
+- name: Verify Database Connectivity
+  win_command: 'sqlplus -L "{{ lookup("env", "crddbuser") }}"/"{{ lookup("env", "crddbpwd") }}"@"{{ crd_db }}"'
+  register: verifyoracle 
+  failed_when: verifyoracle.rc > 2  
+    
+- name: Download CRDApp Server Binaries 
+  win_get_url: 
+    url: "{{ binary_repo }}/Server/{{ crd_ver }}/64bit/CharlesRiver-Server-{{ crd_ver }}-64bit.zip"
+    dest: "{{ temp_drive }}\\temp\\AppServer-{{ crd_ver }}.zip"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_200) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_200) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_200": "success"
+    per_host: no  
+
+- name: Unzip App Server Binaries
+  win_unzip:
+    src: "{{ temp_drive }}\\temp\\AppServer-{{ crd_ver }}.zip"
+    dest: "{{ temp_drive }}\\temp"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_300) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_300) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_300": "success"
+    per_host: no  
+
+- name: Grabbing sqlldr executable path
+  win_shell: "Get-ChildItem -Path {{ temp_drive }}\\Oracle -Include sqlldr.exe -Recurse | % { Write-Host $_.FullName }"
+  register: sqldr
+
+- set_fact:
+    sqldr_path: "{{ sqldr.stdout }}"
+
+- name: Prepare Application Server Response File
+  win_template:
+    src: appserver-response.rsp.j2
+    dest:  "{{ temp_drive }}\\temp\\AppServer-18R1.rsp"
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_600) is not defined
+  
+- name: Apply windows Registry Fix
+  win_shell: 'fsutil behavior set disable8dot3 0'
+  become: yes
+  become_user: Administrator
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_700) is not defined
+
+- name: Copy keytab file
+  win_copy:
+    src: files/v5srvtab.keytab
+    dest: "C:\\DomainB\\KRB5\\v5srvtab.keytab"
+
+- name: Install CRD App Server
+  win_shell: '{{ temp_drive }}\\temp\\CharlesRiver-Server-{{crd_ver}}-64bit\\setup\setup-windows.exe --optionfile {{ temp_drive }}\temp\\AppServer-18R1.rsp  --mode unattended'
+  become: yes
+  become_user: Administrator
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_800) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_800) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_800": "success"
+    per_host: no  
+
+- name: Encrypt & Update CRD Password
+  win_shell: '{{  temp_drive }}\\CharlesRiver\\ServerApps\\bin\\update_password.bat -b -s {{ lookup("env", "crddbpwd") }}'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_900) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_900) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_900": "success"
+    per_host: no  
+
+- name: Update CM Batch for Directory Import
+  win_lineinfile:
+    path: '{{ temp_drive }}\\CharlesRiver\\ServerApps\conf\cm_batch.ini'
+    insertafter: '^Site_ID '
+    line: 'Directory_Import = \\{{import_dir}}\CRD_Inbound_{{crd_env}}'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1000) is not defined
+
+- name: set_task_result_stat
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1000) is not defined
+  set_stats:
+    data: 
+      "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1000": "success"
+    per_host: no  
+
+- name: Install CRD App Server Service
+  win_shell: '{{ temp_drive }}\\CharlesRiver\\ServerApps\bin\crdInstallService.bat "{{ crd_service_name }}"'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1100) is not defined
+  
+- name: Assign LogOnAsService Right 
+  win_user_right:
+   name: SeServiceLogonRight
+   users:
+   - '{{ lookup("env", "app_svc_acc_1") }}'
+   action: add  
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1200) is not defined
+
+- name: Assign local administrator rights to  '{{ lookup("env", "app_svc_acc_1") }}' 
+  win_group_membership:
+    name: Administrators
+    members:
+      - '{{ lookup("env", "app_svc_acc_1") }}'
+    state: present  
+
+- name: Update Windows Service To Run as Service Acount
+  win_service:
+   name: "{{crd_service_name}}"
+   state: stopped
+   username: '{{ lookup("env", "app_svc_acc_1") }}'
+   password: '{{ lookup("env", "app_svc_acc_pass_1") }}'
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1300) is not defined
+  
+- name: Install CRD Fix Engine Service
+  win_service:
+     name: Charles River - Cameron FIX Engine
+     path: '{{temp_drive }}\\CharlesRiver\\ServerApps\fix\bin\service\fixengine64.exe'
+     display_name: Charles River - Cameron FIX Engine
+     description: JavaService utility runs Java applications as service
+     state: stopped
+     username: '{{ lookup("env", "app_svc_acc_1") }}'
+     password: '{{ lookup("env", "app_svc_acc_pass_1") }}'
+
+  when: install_fix_service == 'y'  and ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1400) is not defined
+      
+- debug:
+      msg: " Kindly generatr fix engine config from console before starting the service."  
+
+- name: Performing Cleanup
+  win_file:
+      path: "{{ temp_drive }}\\temp"
+      state: absent   
+  when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_1500) is not defined
+
