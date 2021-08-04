@@ -1,0 +1,101 @@
+---
+
+- name: Import CRD Variables
+  include_vars: host_vars/crd.yml
+  no_log: true
+
+###Disk names are used dynamically either C or D based on teh deployments vmware or cloud as cloud servers doesn't have same disk setup. ###
+- set_fact: 
+    temp_drive: 'D:'
+  when: "'vmware' in deployment_target"
+
+- set_fact: 
+    temp_drive: 'C:'
+  when: "'cloud' in deployment_target"
+
+- name: Create directory structure
+  win_file:
+    path: "{{ temp_drive }}\\temp"
+    state: directory
+
+- name: Looking for any previous dbAdmin installation
+  win_find:
+    paths: "{{temp_drive}}\\CharlesRiver"
+    patterns: ['CharlesRiverDbAdmin.exe']
+  register: dbAdminexists
+
+- block:    
+    - name: Download dbAdmin Binaries
+      win_get_url: 
+        url: "{{ binary_repo }}/dbAdmin/{{ crd_ver }}/64bit/CharlesRiver-dbadmin-{{ crd_ver }}-64bit.zip"
+        dest: "{{ temp_drive }}\\temp\\dbAdmin18R1.zip"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+    
+    - name: set_task_result_stat
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10) is not defined
+      set_stats:
+        data: 
+          "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_10": "success"
+        per_host: no  
+    
+    - name: Unzip dbAdmin
+      win_unzip:
+        src: "{{ temp_drive }}\\temp\\dbAdmin18R1.zip"
+        dest: "{{ temp_drive }}\\temp\\dbAdmin"
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_20) is not defined
+    
+    - name: set_task_result_stat
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_20) is not defined
+      set_stats:
+        data: 
+          "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_20": "success"
+        per_host: no  
+    
+    - name: Create dbAdmin response File
+      win_file:
+        path: "{{ temp_drive }}\\temp\\dbAdmin.rsp"
+        state: touch
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_30) is not defined
+    
+    - name: set_task_result_stat
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_30) is not defined
+      set_stats:
+        data: 
+          "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_30": "success"
+        per_host: no  
+    
+    - name: Update dbAdmin Response File
+      win_lineinfile:
+        path: "{{ temp_drive }}\\temp\\dbAdmin.rsp"
+        line: 'installdir={{temp_drive}}\\CharlesRiver\\dbAdmin'      
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_40) is not defined
+    
+    - name: set_task_result_stat
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_40) is not defined
+      set_stats:
+        data: 
+          "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_40": "success"
+        per_host: no  
+    
+    - name: Install dbAdmin
+      win_package:
+        path: "{{ temp_drive }}\\temp\\dbAdmin\\CharlesRiver-dbadmin-{{ crd_ver }}-64bit\\setup\\setup-windows.exe"
+        product_id: '{DBAI-18.1-115}'
+        arguments: ' --optionfile {{ temp_drive }}\\temp\\dbAdmin.rsp  --mode unattended'
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_50) is not defined
+    
+    - name: set_task_result_stat
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_50) is not defined
+      set_stats:
+        data: 
+          "{{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_50": "success"
+        per_host: no  
+    
+    - name: Performing Cleanup
+      win_file:
+          path: "{{ temp_drive }}\\temp"
+          state: absent
+      when: ({{ tower_job_template_name | regex_replace('-', '_') | regex_replace(' ', '') }}_task_60) is not defined
+
+  when: dbAdminexists.matched < 1
+    
