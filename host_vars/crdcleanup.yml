@@ -1,0 +1,10 @@
+app_install_dir: D:\Ans\CharlesRiverAns\ServerApps
+dbadmin_install_dir: D:\Ans\CharlesRiverAns\dbAdmin
+oracle_install_dir: D:\Ans\ProgramFilesAns\Oracle
+crd_remote_cluster: no
+crd_service_name: CharlesRiver
+bloomberg_service_name: Domain_CRD_Bloomberg_Adapter_CRDENV36
+scheduler_service_name: Domain_CRD_ScheduleJobQueue_Listener_CRDENV36
+crd_env: CRDENV36
+crd_delete_services: y
+delete_binary: Yes
