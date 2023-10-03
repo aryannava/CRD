@@ -16,7 +16,7 @@ crd_product_id: CRDAPP-18.1-177
 crd_env: CRDENV36
 install_fix_service: y
 install_ucd_agent: n
-import_dir: fsdevapp01
+import_dir: dirname
 minor_patch_no:
 
 deployment_target: vmware  #vmware or cloud. Its used to assign right disks
